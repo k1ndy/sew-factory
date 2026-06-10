@@ -23,9 +23,18 @@ alter table batches add column if not exists fabric_price_usd numeric(14,2);
 alter table batches add column if not exists usd_rate numeric(14,4);
 alter table batches add column if not exists fabric_cost_usd numeric(14,2) not null default 0;
 
+-- план (planned_quantity) теперь необязателен: количество известно после
+-- раскроя (факт). Снимаем NOT NULL и разрешаем NULL в check-ограничении.
+alter table batches alter column planned_quantity drop not null;
+alter table batches drop constraint if exists batches_planned_quantity_check;
+alter table batches add constraint batches_planned_quantity_check
+  check (planned_quantity is null or planned_quantity > 0);
+
 -- сигнатуры этих функций изменились — удаляем старые версии,
 -- чтобы 02_functions.sql создал новые без конфликта перегрузок
 drop function if exists create_batch(uuid,text,text,text,text,numeric,numeric,int,numeric,text);
 drop function if exists update_batch(uuid,uuid,text,text,text,text,numeric,numeric,int,int,numeric,text);
+drop function if exists create_batch(uuid,text,text,text,text,text,numeric,numeric,numeric,int,numeric,text);
+drop function if exists update_batch(uuid,uuid,text,text,text,text,text,numeric,numeric,numeric,int,int,numeric,text);
 
 -- дальше выполните 02_functions.sql

@@ -72,7 +72,7 @@ function stat(label, value) {
 
 function batchRow(b) {
   return `<div class="list-row clickable" data-batch="${b.id}">
-    <div><b>${esc(b.name)}</b><div class="muted small">${esc(label.stage(b.current_stage))} · ${num(b.planned_quantity)} ${esc(t('pcs'))}</div></div>
+    <div><b>${esc(b.name)}</b><div class="muted small">${esc(label.stage(b.current_stage))}${b.planned_quantity != null ? ' · ' + num(b.planned_quantity) + ' ' + t('pcs') : ''}</div></div>
     <span class="badge badge-${b.status}">${esc(label.bstatus(b.status))}</span>
   </div>`;
 }

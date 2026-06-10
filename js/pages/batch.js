@@ -43,8 +43,9 @@ export async function renderBatch(c, { id }) {
           ${info(t('batch_fabric'), b.fabric_name)}
           ${b.fabric_quantity != null ? info(t('batch_fabric_qty'),
               num(b.fabric_quantity) + ' ' + (b.fabric_unit === 'kg' ? t('unit_kg_short') : t('unit_meter_short'))) : ''}
-          ${info(t('batch_planned'), num(b.planned_quantity) + ' ' + t('pcs'))}
+          ${b.planned_quantity != null ? info(t('batch_planned'), num(b.planned_quantity) + ' ' + t('pcs')) : ''}
           ${b.actual_quantity != null ? info(t('batch_actual'), num(b.actual_quantity) + ' ' + t('pcs')) : ''}
+          ${b.planned_quantity == null && b.actual_quantity == null ? `<div class="info-row"><span class="muted">${esc(t('batch_actual'))}</span><span class="muted">${esc(t('batch_no_qty'))}</span></div>` : ''}
           ${b.notes ? info(t('batch_notes'), b.notes) : ''}
         </div>
 

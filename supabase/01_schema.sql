@@ -87,7 +87,7 @@ create table if not exists batches (
   usd_rate            numeric(14,4),                    -- курс: сомов за 1 USD
   fabric_cost_usd     numeric(14,2) not null default 0, -- итог по ткани в USD
   fabric_cost         numeric(14,2) not null default 0, -- итог по ткани в сомах
-  planned_quantity    int not null check (planned_quantity > 0),
+  planned_quantity    int check (planned_quantity is null or planned_quantity > 0), -- план необязателен (факт после раскроя)
   actual_quantity     int check (actual_quantity is null or actual_quantity >= 0),
   sale_price_per_unit numeric(14,2),
   current_stage       batch_stage not null default 'cutting',

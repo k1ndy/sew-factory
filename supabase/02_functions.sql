@@ -283,7 +283,8 @@ declare actor employees; b batches; is_money boolean; price numeric; rate numeri
 begin
   actor := app_actor(p_token);
   if actor.role not in ('admin','technologist','cutter') then raise exception 'FORBIDDEN'; end if;
-  if p_planned_quantity is null or p_planned_quantity <= 0 then raise exception 'QTY_INVALID'; end if;
+  -- план необязателен: количество известно после раскроя (факт)
+  if p_planned_quantity is not null and p_planned_quantity <= 0 then raise exception 'QTY_INVALID'; end if;
 
   is_money := actor.role = 'admin';
   price := case when is_money then p_fabric_price_usd else null end;
@@ -318,7 +319,7 @@ begin
   if actor.role not in ('admin','technologist','cutter') then raise exception 'FORBIDDEN'; end if;
   select * into ex from batches where id = p_id;
   if not found then raise exception 'NOT_FOUND'; end if;
-  if p_planned_quantity is null or p_planned_quantity <= 0 then raise exception 'QTY_INVALID'; end if;
+  if p_planned_quantity is not null and p_planned_quantity <= 0 then raise exception 'QTY_INVALID'; end if;
 
   is_money := actor.role = 'admin';
   price := case when is_money then p_fabric_price_usd else ex.fabric_price_usd end;

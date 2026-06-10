@@ -36,8 +36,14 @@ export async function renderProduction(c) {
   await load();
 }
 
+// подпись количества: факт (после раскроя) → план → «не указано»
+function qtyLabel(b) {
+  if (b.actual_quantity != null) return `${esc(t('batch_actual'))}: ${num(b.actual_quantity)} ${esc(t('pcs'))}`;
+  if (b.planned_quantity != null) return `${esc(t('batch_planned'))}: ${num(b.planned_quantity)} ${esc(t('pcs'))}`;
+  return `<span class="muted">${esc(t('batch_no_qty'))}</span>`;
+}
+
 function batchCard(b) {
-  const qty = b.actual_quantity || b.planned_quantity;
   return `<div class="card clickable batch-card" data-batch="${b.id}">
     <div class="row between">
       <b>${esc(b.name)}</b>
@@ -46,7 +52,7 @@ function batchCard(b) {
     <div class="muted small">${esc(b.client_name || '')} ${b.product_type ? '· ' + esc(b.product_type) : ''}</div>
     <div class="row between mt8">
       <span class="badge badge-stage">${esc(label.stage(b.current_stage))}</span>
-      <span class="muted small">${esc(t('batch_planned'))}: ${num(b.planned_quantity)} ${esc(t('pcs'))}</span>
+      <span class="muted small">${qtyLabel(b)}</span>
     </div>
   </div>`;
 }
@@ -72,8 +78,11 @@ export function openBatchForm(onDone, existing) {
       { name: 'usd_rate', label: t('batch_usd_rate'), type: 'number', step: '0.0001', min: '0', value: existing?.usd_rate },
     );
   }
-  fields.push({ name: 'planned', label: t('batch_planned'), type: 'number', min: '1', required: true, value: existing?.planned_quantity });
-  if (existing) fields.push({ name: 'actual', label: t('batch_actual'), type: 'number', min: '0', value: existing?.actual_quantity });
+  // План необязателен; количество (факт) забивается после раскроя — только при редактировании
+  if (existing) {
+    fields.push({ name: 'planned', label: t('batch_planned'), type: 'number', min: '1', value: existing?.planned_quantity });
+    fields.push({ name: 'actual', label: t('batch_actual') + ' (' + t('after_cutting') + ')', type: 'number', min: '0', value: existing?.actual_quantity });
+  }
   if (money) fields.push({ name: 'sale_price', label: t('batch_sale_price'), type: 'number', step: '0.01', min: '0', value: existing?.sale_price_per_unit });
   fields.push({ name: 'notes', label: t('batch_notes'), type: 'textarea', value: existing?.notes });
 
@@ -91,7 +100,7 @@ export function openBatchForm(onDone, existing) {
           p_fabric_unit: v.fabric_unit, p_fabric_quantity: numOrNull(v.fabric_quantity),
           p_fabric_price_usd: money ? numOrNull(v.fabric_price_usd) : null,
           p_usd_rate: money ? numOrNull(v.usd_rate) : null,
-          p_planned_quantity: parseInt(v.planned, 10),
+          p_planned_quantity: v.planned ? parseInt(v.planned, 10) : null,
           p_sale_price: money ? numOrNull(v.sale_price) : null,
           p_notes: v.notes,
         };
