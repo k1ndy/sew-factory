@@ -4,8 +4,9 @@ import { t, label, getLang, setLang, LANGS, LANG_NAMES } from '../i18n.js';
 import { esc, money } from '../ui.js';
 import { navigate } from '../router.js';
 import { store, isWorker, isManager } from '../store.js';
-import { doLogout } from '../app.js';
+import { doLogout, pwa, isStandalone, isIOS, promptInstall } from '../app.js';
 import { openRequestForm } from './advances.js';
+import { toast } from '../ui.js';
 
 export async function renderProfile(c) {
   const u = store.user;
@@ -50,6 +51,8 @@ export async function renderProfile(c) {
         </div>
       </div>
 
+      ${installSection()}
+
       <button class="btn btn-danger btn-block" id="logout">${esc(t('prof_logout'))}</button>
     </div>`;
 
@@ -68,8 +71,36 @@ export async function renderProfile(c) {
     };
   });
 
+  const installBtn = c.querySelector('#install-btn');
+  if (installBtn) installBtn.onclick = async () => {
+    const ok = await promptInstall();
+    if (ok) toast(t('install_done'));
+    renderProfile(c); // перерисовать (кнопка исчезнет после установки)
+  };
+
   c.querySelector('#logout').onclick = async () => {
     const { confirmAction } = await import('../ui.js');
     if (await confirmAction(t('confirm_logout'))) doLogout();
   };
+}
+
+// Секция «Установить приложение» — зависит от платформы/состояния
+function installSection() {
+  if (isStandalone()) {
+    return `<div class="card install-card"><div class="row gap"><span class="notif-icon">✅</span>
+      <div>${esc(t('install_done'))}</div></div></div>`;
+  }
+  let inner;
+  if (isIOS()) {
+    inner = `<div class="muted small">${esc(t('install_ios'))}</div>`;
+  } else if (pwa.deferredPrompt) {
+    inner = `<button class="btn btn-primary btn-block" id="install-btn">⬇️ ${esc(t('install_btn'))}</button>`;
+  } else {
+    inner = `<div class="muted small">${esc(t('install_android'))}</div>`;
+  }
+  return `<div class="card install-card">
+    <h3 class="card-title">📲 ${esc(t('install_title'))}</h3>
+    <div class="muted small" style="margin-bottom:10px">${esc(t('install_hint'))}</div>
+    ${inner}
+  </div>`;
 }

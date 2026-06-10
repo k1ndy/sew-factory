@@ -6,9 +6,10 @@
    - Статика (css/js/иконки): cache-first + фоновое обновление.
    Версия в имени кэша — при изменении статики поднимайте APP_VERSION,
    старые кэши удаляются на activate. */
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.0.1';
 const STATIC_CACHE = 'cex-static-' + APP_VERSION;
-const STATIC_ASSETS = ['/', '/index.html', '/css/styles.css?v=1.0.0', '/manifest.json', '/icons/icon.svg'];
+const STATIC_ASSETS = ['/', '/index.html', '/css/styles.css?v=1.0.1', '/manifest.json',
+  '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-180.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(STATIC_CACHE).then((c) => c.addAll(STATIC_ASSETS)).then(() => self.skipWaiting()));

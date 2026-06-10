@@ -240,3 +240,25 @@ boot();
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 }
+
+// ----- Установка приложения на телефон (PWA install) -----
+export const pwa = { deferredPrompt: null, installed: false };
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();            // не показывать авто-баннер, покажем свою кнопку
+  pwa.deferredPrompt = e;
+});
+window.addEventListener('appinstalled', () => { pwa.deferredPrompt = null; pwa.installed = true; });
+
+export function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+export function isIOS() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+}
+export async function promptInstall() {
+  if (!pwa.deferredPrompt) return false;
+  pwa.deferredPrompt.prompt();
+  const res = await pwa.deferredPrompt.userChoice;
+  pwa.deferredPrompt = null;
+  return res && res.outcome === 'accepted';
+}
