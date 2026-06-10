@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <title>ЦЕХ — управление швейным цехом</title>
+  <meta name="description" content="Управление швейным цехом: партии, задачи, зарплаты, себестоимость">
+
+  <!-- PWA / iOS -->
+  <meta name="theme-color" content="#1f6feb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ЦЕХ">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icons/icon.svg">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+
+  <link rel="stylesheet" href="/css/styles.css?v=1.0.0">
+
+  <!-- preconnect к Supabase (ускоряет первый запрос) -->
+  <script>
+    (function () {
+      try {
+        var env = window.__ENV__ || {};
+        var url = env.SUPABASE_URL;
+        if (url && url.indexOf('YOUR-PROJECT') === -1) {
+          var l = document.createElement('link');
+          l.rel = 'preconnect'; l.href = url; l.crossOrigin = '';
+          document.head.appendChild(l);
+        }
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <div id="app"><div class="loading">Загрузка…</div></div>
+  <script type="module" src="/js/app.js?v=1.0.0"></script>
+</body>
+</html>

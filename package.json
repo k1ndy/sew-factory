@@ -1,0 +1,11 @@
+{
+  "name": "cex-workshop",
+  "version": "1.0.0",
+  "description": "Управление швейным цехом — SPA на vanilla JS + Supabase",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "npx serve .",
+    "start": "npx serve ."
+  }
+}
