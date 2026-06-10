@@ -39,24 +39,31 @@ begin
     ('Жанара Упаковщица',   '+996700000006', crypt('6666', gen_salt('bf')), 'packer')       returning id into pack_id;  -- PIN 6666
 
   -- ---------- Партии ----------
-  -- 1) Футболка холодок — 500 шт, на этапе пошива
-  insert into batches(name, client_name, product_type, fabric_name, fabric_meters, fabric_cost,
+  -- Ткань считается в USD: количество (метр/кг) × цена USD × курс = сом.
+  -- 1) Футболка холодок — 500 шт, на этапе пошива. 250 кг × $2 × 89 = 44 500 сом
+  insert into batches(name, client_name, product_type, fabric_name, fabric_unit, fabric_quantity,
+                      fabric_price_usd, usd_rate, fabric_cost_usd, fabric_cost,
                       planned_quantity, actual_quantity, sale_price_per_unit, current_stage, status, created_by, notes)
-    values ('Футболка холодок', 'ТД «Манас»', 'Футболка', 'Холодок', 320, 96000,
+    values ('Футболка холодок', 'ТД «Манас»', 'Футболка', 'Холодок', 'kg', 250,
+            2.00, 89, 500, 44500,
             500, null, 350, 'sewing', 'active', admin_id, 'Срочный заказ')
     returning id into b1;
 
-  -- 2) Поло мужское — 300 шт, на этапе раскроя
-  insert into batches(name, client_name, product_type, fabric_name, fabric_meters, fabric_cost,
+  -- 2) Поло мужское — 300 шт, на этапе раскроя. 240 м × $1.5 × 89 = 32 040 сом
+  insert into batches(name, client_name, product_type, fabric_name, fabric_unit, fabric_quantity,
+                      fabric_price_usd, usd_rate, fabric_cost_usd, fabric_cost,
                       planned_quantity, actual_quantity, sale_price_per_unit, current_stage, status, created_by)
-    values ('Поло мужское', 'Магазин «Стиль»', 'Поло', 'Пике', 240, 84000,
+    values ('Поло мужское', 'Магазин «Стиль»', 'Поло', 'Пике', 'meter', 240,
+            1.50, 89, 360, 32040,
             300, null, 520, 'cutting', 'active', admin_id)
     returning id into b2;
 
-  -- 3) Худи базовый — 150 шт, на этапе раскроя
-  insert into batches(name, client_name, product_type, fabric_name, fabric_meters, fabric_cost,
+  -- 3) Худи базовый — 150 шт, на этапе раскроя. 180 кг × $3 × 89 = 48 060 сом
+  insert into batches(name, client_name, product_type, fabric_name, fabric_unit, fabric_quantity,
+                      fabric_price_usd, usd_rate, fabric_cost_usd, fabric_cost,
                       planned_quantity, actual_quantity, sale_price_per_unit, current_stage, status, created_by)
-    values ('Худи базовый', 'Частный заказ', 'Худи', 'Футер 3-нитка', 180, 99000,
+    values ('Худи базовый', 'Частный заказ', 'Худи', 'Футер 3-нитка', 'kg', 180,
+            3.00, 89, 540, 48060,
             150, null, 890, 'cutting', 'active', admin_id)
     returning id into b3;
 
@@ -98,11 +105,11 @@ begin
     values (b3, cut_id, admin_id, 'cutting', 150, 12, 'pending') returning id into t_cut3;
 
   -- ---------- Расходы ----------
+  -- Стоимость ткани учитывается в самой партии (fabric_cost), здесь её НЕТ,
+  -- чтобы не было двойного учёта. Тут — прочие расходы.
   insert into expenses(batch_id, category, amount, description, created_by) values
-    (b1, 'fabric', 96000, 'Ткань холодок 320 м', admin_id),
     (b1, 'accessories', 8000, 'Нитки, этикетки', admin_id),
-    (b2, 'fabric', 84000, 'Пике 240 м', admin_id),
-    (b3, 'fabric', 99000, 'Футер 180 м', admin_id),
+    (b2, 'accessories', 5000, 'Пуговицы, нитки', admin_id),
     (null, 'rent', 45000, 'Аренда цеха за месяц', admin_id),
     (null, 'utilities', 12000, 'Электричество и вода', admin_id);
 

@@ -22,6 +22,8 @@ export async function renderBatch(c, { id }) {
     const b = data.batch;
     const mgr = data.is_manager;
     const cost = data.cost;
+    // редактировать может admin, а также закройщик — свою созданную партию
+    const canEdit = isAdmin() || (store.user.role === 'cutter' && b.created_by === store.user.id);
     const tasksByStage = {};
     for (const tk of data.tasks) (tasksByStage[tk.stage] ||= []).push(tk);
 
@@ -39,12 +41,14 @@ export async function renderBatch(c, { id }) {
           ${info(t('batch_client'), b.client_name)}
           ${info(t('batch_product'), b.product_type)}
           ${info(t('batch_fabric'), b.fabric_name)}
+          ${b.fabric_quantity != null ? info(t('batch_fabric_qty'),
+              num(b.fabric_quantity) + ' ' + (b.fabric_unit === 'kg' ? t('unit_kg_short') : t('unit_meter_short'))) : ''}
           ${info(t('batch_planned'), num(b.planned_quantity) + ' ' + t('pcs'))}
           ${b.actual_quantity != null ? info(t('batch_actual'), num(b.actual_quantity) + ' ' + t('pcs')) : ''}
           ${b.notes ? info(t('batch_notes'), b.notes) : ''}
         </div>
 
-        ${mgr ? costCard(b, cost) : ''}
+        ${cost ? costCard(b, cost) : ''}
 
         <div class="card">
           <div class="row between">
@@ -61,7 +65,7 @@ export async function renderBatch(c, { id }) {
             ${b.current_stage === 'packing' ? '🏁 ' + esc(t('stage_completed')) : '➡️ ' + esc(t('batch_next_stage'))}
           </button>` : ''}
 
-        ${mgr ? `
+        ${cost ? `
           <div class="card">
             <h3 class="card-title">${esc(t('batch_history'))}</h3>
             ${data.work_records.length ? data.work_records.map((w) => `
@@ -74,11 +78,12 @@ export async function renderBatch(c, { id }) {
         ${isAdmin() && b.status === 'completed' ? `
           <button class="btn btn-ghost btn-block" id="reopen-batch">↩️ ${esc(t('batch_reopen'))}</button>` : ''}
 
-        ${isAdmin() && !['archived', 'cancelled'].includes(b.status) ? `
+        ${canEdit && !['archived', 'cancelled'].includes(b.status) ? `
           <div class="row gap mt8">
             <button class="btn btn-ghost btn-sm" id="edit-batch">✏️ ${esc(t('edit'))}</button>
-            <button class="btn btn-ghost btn-sm" id="archive-batch">📦 ${esc(t('batch_archive'))}</button>
-            <button class="btn btn-danger btn-sm" id="cancel-batch">✕ ${esc(t('batch_cancel'))}</button>
+            ${isAdmin() ? `
+              <button class="btn btn-ghost btn-sm" id="archive-batch">📦 ${esc(t('batch_archive'))}</button>
+              <button class="btn btn-danger btn-sm" id="cancel-batch">✕ ${esc(t('batch_cancel'))}</button>` : ''}
           </div>` : ''}
       </div>`;
 
@@ -186,14 +191,23 @@ function info(k, v) {
   return `<div class="info-row"><span class="muted">${esc(k)}</span><span>${esc(v)}</span></div>`;
 }
 
+function usd(n) { return '$' + num(n); }
+
 function costCard(b, cost) {
+  // ткань: USD × курс = сомы
+  const fabricUsdStr = cost.fabric_cost_usd
+    ? ` (${usd(cost.fabric_cost_usd)}${cost.usd_rate ? ' × ' + num(cost.usd_rate) : ''})`
+    : '';
   let html = `<div class="card">
     <h3 class="card-title">${esc(t('cost_title'))}</h3>
-    ${info(t('cost_fabric'), money(cost.fabric_cost))}
+    ${cost.fabric_quantity != null ? info(t('batch_fabric_qty'),
+        num(cost.fabric_quantity) + ' ' + (cost.fabric_unit === 'kg' ? t('unit_kg_short') : t('unit_meter_short'))) : ''}
+    ${info(t('cost_fabric'), money(cost.fabric_cost) + fabricUsdStr)}
     ${info(t('cost_expenses'), money(cost.expense_total))}
     ${info(t('cost_work'), money(cost.work_total))}
     <div class="info-row total"><span>${esc(t('cost_total'))}</span><span>${money(cost.total_cost)}</span></div>
-    ${cost.unit_cost != null ? info(t('cost_unit'), money(cost.unit_cost)) : ''}`;
+    ${cost.unit_cost != null ? info(t('cost_unit'), money(cost.unit_cost)
+        + (cost.unit_fabric_usd != null ? ` (${esc(t('cost_fabric'))}: ${usd(cost.unit_fabric_usd)})` : '')) : ''}`;
   if (cost.revenue != null) {
     html += info(t('cost_revenue'), money(cost.revenue));
     html += `<div class="info-row ${cost.profit >= 0 ? 'profit' : 'loss'}"><span>${esc(t('cost_profit'))}</span><span>${money(cost.profit)}</span></div>`;

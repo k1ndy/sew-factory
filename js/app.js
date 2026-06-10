@@ -39,11 +39,20 @@ function navItems() {
   if (r === 'technologist') return [
     { path: '/production', icon: '🧵', key: 'nav_production' },
     { path: '/tasks', icon: '✅', key: 'nav_tasks' },
+    { path: '/salaries', icon: '💰', key: 'nav_salaries' },
     { path: '/advances', icon: '📥', key: 'nav_advances' },
     { path: '/notifications', icon: '🔔', key: 'nav_notifications' },
     { path: '/profile', icon: '👤', key: 'nav_profile' },
   ];
-  // исполнители
+  if (r === 'cutter') return [
+    { path: '/tasks', icon: '✅', key: 'nav_tasks' },
+    { path: '/production', icon: '🧵', key: 'nav_production' },
+    { path: '/my-salary', icon: '💰', key: 'nav_salaries' },
+    { path: '/advances', icon: '📥', key: 'nav_advances' },
+    { path: '/notifications', icon: '🔔', key: 'nav_notifications' },
+    { path: '/profile', icon: '👤', key: 'nav_profile' },
+  ];
+  // остальные исполнители
   return [
     { path: '/tasks', icon: '✅', key: 'nav_tasks' },
     { path: '/my-salary', icon: '💰', key: 'nav_salaries' },
@@ -144,8 +153,8 @@ function registerRoutes() {
   route('/batch/:id', guard((c, p) => renderBatch(c, p)));
   route('/tasks', guard((c) => renderTasks(c)));
   route('/employees', guard((c) => renderEmployees(c), { roles: ['admin'] }));
-  route('/salaries', guard((c) => renderSalaries(c), { roles: ['admin'] }));
-  route('/salary/:id', guard((c, p) => renderSalaryOne(c, p), { roles: ['admin'] }));
+  route('/salaries', guard((c) => renderSalaries(c), { roles: ['admin', 'technologist'] }));
+  route('/salary/:id', guard((c, p) => renderSalaryOne(c, p), { roles: ['admin', 'technologist'] }));
   route('/my-salary', guard((c) => renderMySalary(c)));
   route('/expenses', guard((c) => renderExpenses(c), { roles: ['admin'] }));
   route('/advances', guard((c) => renderAdvances(c)));

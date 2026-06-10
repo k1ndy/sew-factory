@@ -36,6 +36,13 @@ begin
   if actor.role not in ('admin','technologist') then raise exception 'FORBIDDEN'; end if;
 end $$;
 
+-- кто управляет зарплатами: admin и technologist (технолог выдаёт ЗП)
+create or replace function assert_salary_mgr(actor employees) returns void
+language plpgsql as $$
+begin
+  if actor.role not in ('admin','technologist') then raise exception 'FORBIDDEN'; end if;
+end $$;
+
 create or replace function employee_public(e employees) returns jsonb
 language sql as $$
   select to_jsonb(e) - 'pin_hash' - 'failed_attempts';
@@ -253,55 +260,79 @@ begin
      where case when p_archived then b.status in ('archived','cancelled')
                 else b.status not in ('archived','cancelled') end;
   else
-    -- исполнитель видит только партии, где есть его задачи
+    -- исполнитель видит партии, где есть его задачи или которые он создал (закройщик)
     select coalesce(jsonb_agg(to_jsonb(b) order by b.created_at desc), '[]'::jsonb) into r
       from batches b
-     where exists(select 1 from tasks t where t.batch_id = b.id and t.employee_id = actor.id)
+     where (b.created_by = actor.id
+            or exists(select 1 from tasks t where t.batch_id = b.id and t.employee_id = actor.id))
        and case when p_archived then b.status in ('archived','cancelled')
                 else b.status not in ('archived','cancelled') end;
   end if;
   return r;
 end $$;
 
+-- Создать партию. Доступно admin, technologist и cutter (закройщику).
+-- Денежные поля (цена ткани в USD, курс, цена продажи) заполняет только admin.
 create or replace function create_batch(
   p_token uuid, p_name text, p_client text, p_product text, p_fabric_name text,
-  p_fabric_meters numeric, p_fabric_cost numeric, p_planned_quantity int,
-  p_sale_price numeric default null, p_notes text default null)
+  p_fabric_unit text, p_fabric_quantity numeric, p_fabric_price_usd numeric, p_usd_rate numeric,
+  p_planned_quantity int, p_sale_price numeric default null, p_notes text default null)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare actor employees; b batches;
+declare actor employees; b batches; is_money boolean; price numeric; rate numeric; cost_usd numeric; cost_som numeric;
 begin
   actor := app_actor(p_token);
-  perform assert_admin(actor);
+  if actor.role not in ('admin','technologist','cutter') then raise exception 'FORBIDDEN'; end if;
   if p_planned_quantity is null or p_planned_quantity <= 0 then raise exception 'QTY_INVALID'; end if;
-  insert into batches(name, client_name, product_type, fabric_name, fabric_meters, fabric_cost,
+
+  is_money := actor.role = 'admin';
+  price := case when is_money then p_fabric_price_usd else null end;
+  rate  := case when is_money then p_usd_rate else null end;
+  cost_usd := coalesce(p_fabric_quantity,0) * coalesce(price,0);
+  cost_som := cost_usd * coalesce(rate,0);
+
+  insert into batches(name, client_name, product_type, fabric_name, fabric_unit, fabric_quantity,
+                      fabric_price_usd, usd_rate, fabric_cost_usd, fabric_cost,
                       planned_quantity, sale_price_per_unit, notes, created_by)
-    values (p_name, p_client, p_product, p_fabric_name, p_fabric_meters, coalesce(p_fabric_cost,0),
-            p_planned_quantity, p_sale_price, p_notes, actor.id)
+    values (p_name, p_client, p_product, p_fabric_name, coalesce(p_fabric_unit,'meter'), p_fabric_quantity,
+            price, rate, cost_usd, cost_som,
+            p_planned_quantity, case when is_money then p_sale_price else null end, p_notes, actor.id)
     returning * into b;
   perform notify(null, 'technologist', 'Создана новая партия: ' || p_name, 'batch_created', b.id);
   perform notify(null, 'admin', 'Создана новая партия: ' || p_name, 'batch_created', b.id);
   return to_jsonb(b);
 end $$;
 
+-- Обновить партию. admin меняет всё; technologist/cutter — только нефинансовые
+-- поля (название, ткань, метраж/вес, план, факт, заметки). Денежные поля
+-- (цена USD, курс, цена продажи) у не-админа сохраняются прежними.
 create or replace function update_batch(
   p_token uuid, p_id uuid, p_name text, p_client text, p_product text, p_fabric_name text,
-  p_fabric_meters numeric, p_fabric_cost numeric, p_planned_quantity int,
-  p_actual_quantity int, p_sale_price numeric, p_notes text)
+  p_fabric_unit text, p_fabric_quantity numeric, p_fabric_price_usd numeric, p_usd_rate numeric,
+  p_planned_quantity int, p_actual_quantity int, p_sale_price numeric, p_notes text)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare actor employees; b batches;
+declare actor employees; b batches; ex batches; is_money boolean; price numeric; rate numeric; cost_usd numeric; cost_som numeric;
 begin
   actor := app_actor(p_token);
-  perform assert_admin(actor);
+  if actor.role not in ('admin','technologist','cutter') then raise exception 'FORBIDDEN'; end if;
+  select * into ex from batches where id = p_id;
+  if not found then raise exception 'NOT_FOUND'; end if;
   if p_planned_quantity is null or p_planned_quantity <= 0 then raise exception 'QTY_INVALID'; end if;
+
+  is_money := actor.role = 'admin';
+  price := case when is_money then p_fabric_price_usd else ex.fabric_price_usd end;
+  rate  := case when is_money then p_usd_rate else ex.usd_rate end;
+  cost_usd := coalesce(p_fabric_quantity,0) * coalesce(price,0);
+  cost_som := cost_usd * coalesce(rate,0);
+
   update batches set
     name = p_name, client_name = p_client, product_type = p_product, fabric_name = p_fabric_name,
-    fabric_meters = p_fabric_meters, fabric_cost = coalesce(p_fabric_cost,0),
-    planned_quantity = p_planned_quantity, actual_quantity = p_actual_quantity,
-    sale_price_per_unit = p_sale_price, notes = p_notes
+    fabric_unit = coalesce(p_fabric_unit, fabric_unit), fabric_quantity = p_fabric_quantity,
+    planned_quantity = p_planned_quantity, actual_quantity = p_actual_quantity, notes = p_notes,
+    fabric_price_usd = price, usd_rate = rate, fabric_cost_usd = cost_usd, fabric_cost = cost_som,
+    sale_price_per_unit = case when is_money then p_sale_price else sale_price_per_unit end
   where id = p_id returning * into b;
-  if not found then raise exception 'NOT_FOUND'; end if;
   return to_jsonb(b);
 end $$;
 
@@ -404,10 +435,11 @@ begin
   if not found then raise exception 'NOT_FOUND'; end if;
 
   can_view := actor.role in ('admin','technologist')
+              or b.created_by = actor.id
               or exists(select 1 from tasks t where t.batch_id = b.id and t.employee_id = actor.id);
   if not can_view then raise exception 'FORBIDDEN'; end if;
 
-  -- задачи (исполнитель видит только свои)
+  -- задачи: менеджеры и создатель партии видят все, остальные — только свои
   select coalesce(jsonb_agg(jsonb_build_object(
             'id', t.id, 'stage', t.stage, 'employee_id', t.employee_id,
             'employee_name', e.full_name, 'planned_quantity', t.planned_quantity,
@@ -417,7 +449,7 @@ begin
     into tasks_json
     from tasks t join employees e on e.id = t.employee_id
    where t.batch_id = b.id
-     and (actor.role in ('admin','technologist') or t.employee_id = actor.id);
+     and (actor.role in ('admin','technologist') or b.created_by = actor.id or t.employee_id = actor.id);
 
   select coalesce(sum(total_amount),0) into work_total from work_records where batch_id = b.id;
   select coalesce(sum(amount),0) into expense_total from expenses where batch_id = b.id;
@@ -431,8 +463,8 @@ begin
     margin  := case when revenue > 0 then profit / revenue * 100 else null end;
   end if;
 
-  -- история работ доступна только менеджерам
-  if actor.role in ('admin','technologist') then
+  -- история работ (с суммами) — только admin (деньги)
+  if actor.role = 'admin' then
     select coalesce(jsonb_agg(jsonb_build_object(
               'id', w.id, 'employee_name', e.full_name, 'stage', w.stage,
               'quantity', w.quantity, 'rate_per_unit', w.rate_per_unit,
@@ -449,14 +481,19 @@ begin
     'batch', to_jsonb(b),
     'tasks', tasks_json,
     'work_records', wr_json,
-    -- себестоимость отдаём только менеджерам
-    'cost', case when actor.role in ('admin','technologist') then jsonb_build_object(
+    -- себестоимость (деньги) отдаём ТОЛЬКО admin; технолог её не видит
+    'cost', case when actor.role = 'admin' then jsonb_build_object(
+      'fabric_unit', b.fabric_unit,
+      'fabric_quantity', b.fabric_quantity,
+      'fabric_cost_usd', coalesce(b.fabric_cost_usd,0),
+      'usd_rate', b.usd_rate,
       'fabric_cost', coalesce(b.fabric_cost,0),
       'expense_total', expense_total,
       'work_total', work_total,
       'total_cost', total_cost,
       'qty', qty,
       'unit_cost', unit_cost,
+      'unit_fabric_usd', case when qty > 0 then coalesce(b.fabric_cost_usd,0) / qty else null end,
       'revenue', revenue,
       'profit', profit,
       'margin', margin) else null end,
@@ -615,7 +652,7 @@ declare actor employees; target uuid; wr jsonb; pays jsonb; emp employees;
 begin
   actor := app_actor(p_token);
   target := coalesce(p_employee_id, actor.id);
-  if target <> actor.id and actor.role <> 'admin' then raise exception 'FORBIDDEN'; end if;
+  if target <> actor.id and actor.role not in ('admin','technologist') then raise exception 'FORBIDDEN'; end if;
 
   select * into emp from employees where id = target;
   select coalesce(jsonb_agg(jsonb_build_object(
@@ -642,7 +679,7 @@ language plpgsql security definer set search_path = public as $$
 declare actor employees; r jsonb;
 begin
   actor := app_actor(p_token);
-  perform assert_admin(actor);
+  perform assert_salary_mgr(actor);
   select coalesce(jsonb_agg(jsonb_build_object(
             'employee', employee_public(e),
             'summary', salary_summary('admin', e.id)) order by e.full_name), '[]'::jsonb)
@@ -658,7 +695,7 @@ language plpgsql security definer set search_path = public as $$
 declare actor employees; p payments;
 begin
   actor := app_actor(p_token);
-  perform assert_admin(actor);
+  perform assert_salary_mgr(actor);
   if p_amount is null or p_amount <= 0 then raise exception 'AMOUNT_INVALID'; end if;
   if p_type not in ('salary','advance','bonus','penalty') then raise exception 'TYPE_INVALID'; end if;
   insert into payments(employee_id, amount, type, batch_id, note, created_by)

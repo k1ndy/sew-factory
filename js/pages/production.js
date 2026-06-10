@@ -3,7 +3,7 @@ import { rpc } from '../api.js';
 import { t, label } from '../i18n.js';
 import { esc, money, num, emptyState, openSheet, closeSheet, buildForm, formValues, toast, toastError, withBusy } from '../ui.js';
 import { navigate } from '../router.js';
-import { isAdmin, isManager } from '../store.js';
+import { isAdmin, isManager, canCreateBatch } from '../store.js';
 
 export async function renderProduction(c) {
   let archived = false;
@@ -14,7 +14,7 @@ export async function renderProduction(c) {
       <div class="page">
         <div class="page-head">
           <h2 class="page-title">${esc(t('nav_production'))}</h2>
-          ${isAdmin() ? `<button class="btn btn-primary btn-sm" id="new-batch">+ ${esc(t('prod_new_batch'))}</button>` : ''}
+          ${canCreateBatch() ? `<button class="btn btn-primary btn-sm" id="new-batch">+ ${esc(t('prod_new_batch'))}</button>` : ''}
         </div>
         <div class="tabs">
           <button class="tab ${!archived ? 'active' : ''}" data-tab="active">${esc(t('prod_active'))}</button>
@@ -52,20 +52,33 @@ function batchCard(b) {
 }
 
 export function openBatchForm(onDone, existing) {
-  const form = buildForm([
+  const money = isAdmin();   // денежные поля только у владельца
+  const unitOpts = [
+    { value: 'meter', label: t('unit_meter') },
+    { value: 'kg', label: t('unit_kg') },
+  ];
+
+  const fields = [
     { name: 'name', label: t('batch_name'), required: true, value: existing?.name },
     { name: 'client', label: t('batch_client'), value: existing?.client_name },
     { name: 'product', label: t('batch_product'), value: existing?.product_type },
     { name: 'fabric_name', label: t('batch_fabric'), value: existing?.fabric_name },
-    { name: 'fabric_meters', label: t('batch_fabric_meters'), type: 'number', step: '0.01', min: '0', value: existing?.fabric_meters },
-    { name: 'fabric_cost', label: t('batch_fabric_cost'), type: 'number', step: '0.01', min: '0', value: existing?.fabric_cost ?? 0 },
-    { name: 'planned', label: t('batch_planned'), type: 'number', min: '1', required: true, value: existing?.planned_quantity },
-    ...(existing ? [{ name: 'actual', label: t('batch_actual'), type: 'number', min: '0', value: existing?.actual_quantity }] : []),
-    { name: 'sale_price', label: t('batch_sale_price'), type: 'number', step: '0.01', min: '0', value: existing?.sale_price_per_unit },
-    { name: 'notes', label: t('batch_notes'), type: 'textarea', value: existing?.notes },
-  ], { submitLabel: t('save') });
+    { name: 'fabric_unit', label: t('batch_fabric_unit'), type: 'select', options: unitOpts, value: existing?.fabric_unit || 'meter' },
+    { name: 'fabric_quantity', label: t('batch_fabric_qty'), type: 'number', step: '0.01', min: '0', value: existing?.fabric_quantity },
+  ];
+  if (money) {
+    fields.push(
+      { name: 'fabric_price_usd', label: t('batch_fabric_price_usd'), type: 'number', step: '0.01', min: '0', value: existing?.fabric_price_usd },
+      { name: 'usd_rate', label: t('batch_usd_rate'), type: 'number', step: '0.0001', min: '0', value: existing?.usd_rate },
+    );
+  }
+  fields.push({ name: 'planned', label: t('batch_planned'), type: 'number', min: '1', required: true, value: existing?.planned_quantity });
+  if (existing) fields.push({ name: 'actual', label: t('batch_actual'), type: 'number', min: '0', value: existing?.actual_quantity });
+  if (money) fields.push({ name: 'sale_price', label: t('batch_sale_price'), type: 'number', step: '0.01', min: '0', value: existing?.sale_price_per_unit });
+  fields.push({ name: 'notes', label: t('batch_notes'), type: 'textarea', value: existing?.notes });
 
-  const { close } = openSheet({ title: existing ? t('edit') : t('prod_new_batch'), content: form });
+  const form = buildForm(fields, { submitLabel: t('save') });
+  openSheet({ title: existing ? t('edit') : t('prod_new_batch'), content: form });
 
   form.onsubmit = async (e) => {
     e.preventDefault();
@@ -73,19 +86,19 @@ export function openBatchForm(onDone, existing) {
     const btn = form.querySelector('button[type="submit"]');
     await withBusy(btn, async () => {
       try {
+        const common = {
+          p_name: v.name, p_client: v.client, p_product: v.product, p_fabric_name: v.fabric_name,
+          p_fabric_unit: v.fabric_unit, p_fabric_quantity: numOrNull(v.fabric_quantity),
+          p_fabric_price_usd: money ? numOrNull(v.fabric_price_usd) : null,
+          p_usd_rate: money ? numOrNull(v.usd_rate) : null,
+          p_planned_quantity: parseInt(v.planned, 10),
+          p_sale_price: money ? numOrNull(v.sale_price) : null,
+          p_notes: v.notes,
+        };
         if (existing) {
-          await rpc('update_batch', {
-            p_id: existing.id, p_name: v.name, p_client: v.client, p_product: v.product,
-            p_fabric_name: v.fabric_name, p_fabric_meters: numOrNull(v.fabric_meters),
-            p_fabric_cost: numOrNull(v.fabric_cost) || 0, p_planned_quantity: parseInt(v.planned, 10),
-            p_actual_quantity: numOrNull(v.actual), p_sale_price: numOrNull(v.sale_price), p_notes: v.notes,
-          });
+          await rpc('update_batch', { p_id: existing.id, ...common, p_actual_quantity: numOrNull(v.actual) });
         } else {
-          await rpc('create_batch', {
-            p_name: v.name, p_client: v.client, p_product: v.product, p_fabric_name: v.fabric_name,
-            p_fabric_meters: numOrNull(v.fabric_meters), p_fabric_cost: numOrNull(v.fabric_cost) || 0,
-            p_planned_quantity: parseInt(v.planned, 10), p_sale_price: numOrNull(v.sale_price), p_notes: v.notes,
-          });
+          await rpc('create_batch', common);
         }
         closeSheet();
         toast(t('toast_saved'));
