@@ -388,12 +388,12 @@ begin
     raise exception 'FORCE_REQUIRES_ADMIN';
   end if;
 
-  next_stage := case b.current_stage
+  next_stage := (case b.current_stage
                   when 'cutting' then 'sewing'
                   when 'sewing'  then 'ironing'
                   when 'ironing' then 'packing'
                   when 'packing' then 'completed'
-                end;
+                end)::batch_stage;
 
   if next_stage = 'completed' then
     update batches set current_stage = 'completed', status = 'completed', completed_at = now()
@@ -616,15 +616,14 @@ begin
 
   update tasks set
     completed_quantity = new_done,
-    status = case when new_done >= planned_quantity then 'completed' else 'in_progress' end,
+    status = (case when new_done >= planned_quantity then 'completed' else 'in_progress' end)::task_status,
     completed_at = case when new_done >= planned_quantity then now() else completed_at end
   where id = t.id;
 
   select * into b from batches where id = t.batch_id;
   perform notify(null, 'admin',
     b.name || ': ' || actor.full_name || ' сдал(а) ' || p_quantity || ' шт (' || t.stage || ')',
-    case when new_done >= t.planned_quantity then 'task_completed' else 'task_completed' end,
-    t.batch_id, t.id);
+    'task_completed', t.batch_id, t.id);
 
   return to_jsonb(wr);
 end $$;
