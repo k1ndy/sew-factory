@@ -45,7 +45,7 @@ $$;
 
 create or replace function login(p_phone text, p_pin text)
 returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare e employees; t uuid;
 begin
   select * into e from employees where phone = p_phone;
@@ -180,7 +180,7 @@ end $$;
 create or replace function create_employee(
   p_token uuid, p_full_name text, p_phone text, p_pin text, p_role text)
 returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare actor employees; e employees;
 begin
   actor := app_actor(p_token);
@@ -196,7 +196,7 @@ end $$;
 create or replace function update_employee(
   p_token uuid, p_id uuid, p_full_name text, p_phone text, p_role text, p_pin text default null)
 returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare actor employees; e employees;
 begin
   actor := app_actor(p_token);
